@@ -1,7 +1,8 @@
 #lang racket
 
-(require (planet dmac/spin)
-         web-server/servlet)
+(require "spin/main.rkt"
+         web-server/servlet
+         json)
 
 (define PORT
   (let ([port (environment-variables-ref (current-environment-variables) #"PORT")])
