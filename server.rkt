@@ -13,7 +13,7 @@
 (define PORT
   (let ([port (environment-variables-ref (current-environment-variables) #"PORT")])
     (if port
-        (string->number port)
+        (string->number (bytes->string/utf-8 port))
         5000)))
 
 (define XMATTERS_HOST "familysearch.hosted.xmatters.com")
