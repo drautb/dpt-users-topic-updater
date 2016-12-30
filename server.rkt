@@ -98,11 +98,16 @@
           (primary-on-call CDSVCS_GROUP)))
 
 (define (set-channel-topic topic-str)
+  (define (generate-uri)
+    (define type (substring SLACK_CHANNEL_ID 0 1))
+    (if (eq? type "C")
+        "/api/channels.setTopic"
+        "/api/groups.setTopic"))
   (define (generate-headers)
     (list (format "Authorization: Basic ~a" XMATTERS_TOKEN)))
   (let-values ([(status-code header in-port)
                 (http-sendrecv SLACK_HOST
-                               "/api/groups.setTopic"
+                               (generate-uri)
                                #:ssl? #t
                                #:method "POST"
                                #:headers (list "Content-Type: application/x-www-form-urlencoded")
