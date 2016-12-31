@@ -100,7 +100,7 @@
 (define (set-channel-topic topic-str)
   (define (generate-uri)
     (define type (substring SLACK_CHANNEL_ID 0 1))
-    (if (eq? type "C")
+    (if (equal? type "C")
         "/api/channels.setTopic"
         "/api/groups.setTopic"))
   (define (generate-headers)
