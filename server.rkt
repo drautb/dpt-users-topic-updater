@@ -28,7 +28,7 @@
 (define VPC_GROUP "Platform VPC")
 (define CDSVCS_GROUP "Continuous Delivery Services")
 
-;; G07KHQH1Q = #drautb-test
+;; C1122QS1H = #test
 ;; C07KDNCN7 = #dpt-users
 (define SLACK_CHANNEL_ID (load-env-var #"SLACK_CHANNEL_ID"))
 (define SLACK_TOKEN (load-env-var #"SLACK_TOKEN"))
@@ -59,8 +59,9 @@
 
 (define (update-topic) (λ ()
                          (log-info "Updating topic.")
-                         (define new-topic (generate-new-topic))
-                         (set-channel-topic new-topic)
+                         (define new-topic (generate-new-topic
+                                             (get-channel-topic SLACK_CHANNEL_ID)))
+                         (set-channel-topic SLACK_CHANNEL_ID new-topic)
                          (make-hash (list (cons 'newTopic new-topic)))))
 
 (define (get-group-calendar group-name)
@@ -91,29 +92,49 @@
 (define (primary-on-call group-name)
   (extract-primary-from-calendar (get-group-calendar group-name)))
 
-(define (generate-new-topic)
-  (format TOPIC-TEMPLATE
-          (primary-on-call PROVISIONING_GROUP)
-          (primary-on-call VPC_GROUP)
-          (primary-on-call CDSVCS_GROUP)))
+(define (update-provisioning-and-vpc old-topic)
+  (define replacement-patterns
+    (list
+      (list #px"\\: \\w+\\s\\w+ \\|"
+            (string-append ": " (primary-on-call PROVISIONING_GROUP) " |"))
+      (list #rx"\\| (.*) \\|"
+            (string-append "| " (primary-on-call VPC_GROUP) " |"))))
+  (regexp-replaces old-topic replacement-patterns))
 
-(define (set-channel-topic topic-str)
-  (define (generate-uri)
-    (define type (substring SLACK_CHANNEL_ID 0 1))
-    (if (equal? type "C")
-        "/api/channels.setTopic"
-        "/api/groups.setTopic"))
-  (define (generate-headers)
-    (list (format "Authorization: Basic ~a" XMATTERS_TOKEN)))
+(define (generate-new-topic old-topic)
+  (if (non-empty-string? old-topic)
+      (update-provisioning-and-vpc old-topic)
+      (format TOPIC-TEMPLATE
+              (primary-on-call PROVISIONING_GROUP)
+              (primary-on-call VPC_GROUP)
+              (primary-on-call CDSVCS_GROUP))))
+
+(define (get-channel-topic channel-id)
   (let-values ([(status-code header in-port)
-                (http-sendrecv SLACK_HOST
-                               (generate-uri)
+                (http-sendrecv SLACK_HOST "/api/channels.info"
                                #:ssl? #t
                                #:method "POST"
                                #:headers (list "Content-Type: application/x-www-form-urlencoded")
                                #:data (alist->form-urlencoded
                                         (list (cons 'token SLACK_TOKEN)
-                                              (cons 'channel SLACK_CHANNEL_ID)
+                                              (cons 'channel channel-id))))])
+    (define response-body (port->string in-port))
+    (log-info "response from slack api call. status-code=~a response-body=~a"
+              status-code response-body)
+    (define response-json (string->jsexpr response-body))
+    (hash-ref (hash-ref (hash-ref response-json 'channel)
+                        'topic)
+              'value)))
+
+(define (set-channel-topic channel-id topic-str)
+  (let-values ([(status-code header in-port)
+                (http-sendrecv SLACK_HOST "/api/channels.setTopic"
+                               #:ssl? #t
+                               #:method "POST"
+                               #:headers (list "Content-Type: application/x-www-form-urlencoded")
+                               #:data (alist->form-urlencoded
+                                        (list (cons 'token SLACK_TOKEN)
+                                              (cons 'channel channel-id)
                                               (cons 'topic topic-str))))])
     (log-info "response from slack api call. status-code=~a response-body=~a"
               status-code (port->string in-port))))
